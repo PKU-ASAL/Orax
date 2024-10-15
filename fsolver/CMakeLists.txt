@@ -1,0 +1,21 @@
+cmake_minimum_required(VERSION 3.15.0)
+project(fsolver C CXX)
+set(PROJECT_VERSION_MAJOR 0)
+set(PROJECT_VERSION_MINOR 1)
+set(PROJECT_VERSION "${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}")
+set(CMAKE_C_STANDARD 17)
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_C_FLAGS "-fno-rtti")
+set(CMAKE_CXX_FLAGS "-fno-rtti")
+set(EXECUTABLE_OUTPUT_PATH ${PROJECT_BINARY_DIR}/bin)
+set(LIBRARY_OUTPUT_PATH ${PROJECT_BINARY_DIR}/lib)
+include_directories(${PROJECT_SOURCE_DIR}/include)
+set(SRC_DIR lib)
+add_subdirectory(${SRC_DIR})
+install(
+    TARGETS fsolve fsolver
+    LIBRARY DESTINATION lib
+    ARCHIVE DESTINATION lib
+    RUNTIME DESTINATION bin
+    INCLUDES DESTINATION include
+)

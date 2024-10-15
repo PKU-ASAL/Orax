@@ -1,0 +1,262 @@
+/*********************                                                        */
+/*! \file theory_uf.h
+ ** \verbatim
+ ** Top contributors (to current version):
+ **   Andrew Reynolds, Morgan Deters, Tim King
+ ** This file is part of the CVC4 project.
+ ** Copyright (c) 2009-2021 by the authors listed in the file AUTHORS
+ ** in the top-level source directory and their institutional affiliations.
+ ** All rights reserved.  See the file COPYING in the top-level source
+ ** directory for licensing information.\endverbatim
+ **
+ ** \brief This is the interface to TheoryUF implementations
+ **
+ ** This is the interface to TheoryUF implementations.  All
+ ** implementations of TheoryUF should inherit from this class.
+ **/
+
+#include "cvc4_private.h"
+
+#ifndef CVC4__THEORY__UF__THEORY_UF_H
+#define CVC4__THEORY__UF__THEORY_UF_H
+
+#include "expr/node.h"
+#include "expr/node_trie.h"
+#include "fuzzer/wrafl.h"
+// orax
+#include "fuzzer/aufbv-wrafl.h"
+
+#include "theory/theory.h"
+#include "theory/theory_eq_notify.h"
+#include "theory/theory_state.h"
+#include "theory/uf/proof_checker.h"
+#include "theory/uf/symmetry_breaker.h"
+#include "theory/uf/theory_uf_rewriter.h"
+#include "include/termcolor.hpp"
+
+namespace cvc5 {
+namespace cgen { class CodeGenerator; }
+namespace theory {
+namespace uf {
+
+class CardinalityExtension;
+class HoExtension;
+
+class TheoryUF : public Theory
+{
+ public:
+  class NotifyClass : public TheoryEqNotifyClass
+  {
+   public:
+    NotifyClass(TheoryInferenceManager& im, TheoryUF& uf)
+        : TheoryEqNotifyClass(im), d_uf(uf)
+    {
+    }
+
+    void eqNotifyNewClass(TNode t) override
+    {
+      Debug("uf-notify") << "NotifyClass::eqNotifyNewClass(" << t << ")"
+                         << std::endl;
+      d_uf.eqNotifyNewClass(t);
+    }
+
+    void eqNotifyMerge(TNode t1, TNode t2) override
+    {
+      Debug("uf-notify") << "NotifyClass::eqNotifyMerge(" << t1 << ", " << t2
+                         << ")" << std::endl;
+      d_uf.eqNotifyMerge(t1, t2);
+    }
+
+    void eqNotifyDisequal(TNode t1, TNode t2, TNode reason) override
+    {
+      Debug("uf-notify") << "NotifyClass::eqNotifyDisequal(" << t1 << ", " << t2
+                         << ", " << reason << ")" << std::endl;
+      d_uf.eqNotifyDisequal(t1, t2, reason);
+    }
+
+   private:
+    /** Reference to the parent theory */
+    TheoryUF& d_uf;
+  }; /* class TheoryUF::NotifyClass */
+
+ private:
+  /** The associated cardinality extension (or nullptr if it does not exist) */
+  std::unique_ptr<CardinalityExtension> d_thss;
+  /** the higher-order solver extension (or nullptr if it does not exist) */
+  std::unique_ptr<HoExtension> d_ho;
+
+  /** node for true */
+  Node d_true;
+
+  /** All the function terms that the theory has seen */
+  context::CDList<TNode> d_functionsTerms;
+
+  /** Symmetry analyzer */
+  SymmetryBreaker d_symb;
+
+  /** called when a new equivalance class is created */
+  void eqNotifyNewClass(TNode t);
+
+  /** called when two equivalance classes have merged */
+  void eqNotifyMerge(TNode t1, TNode t2);
+
+  /** called when two equivalence classes are made disequal */
+  void eqNotifyDisequal(TNode t1, TNode t2, TNode reason);
+
+ public:
+  /** Constructs a new instance of TheoryUF w.r.t. the provided context.*/
+  TheoryUF(context::Context* c,
+           context::UserContext* u,
+           OutputChannel& out,
+           Valuation valuation,
+           const LogicInfo& logicInfo,
+           ProofNodeManager* pnm = nullptr,
+           std::string instanceName = "");
+
+  ~TheoryUF();
+
+  //--------------------------------- initialization
+  /** get the official theory rewriter of this theory */
+  TheoryRewriter* getTheoryRewriter() override;
+  /**
+   * Returns true if we need an equality engine. If so, we initialize the
+   * information regarding how it should be setup. For details, see the
+   * documentation in Theory::needsEqualityEngine.
+   */
+  bool needsEqualityEngine(EeSetupInfo& esi) override;
+  /** finish initialization */
+  void finishInit() override;
+  //--------------------------------- end initialization
+
+  //--------------------------------- standard check
+  /** Do we need a check call at last call effort? */
+  bool needsCheckLastEffort() override;
+
+  void check(Effort level = EFFORT_FULL) override;
+  /** Post-check, called after the fact queue of the theory is processed. */
+  void postCheck(Effort level) override;
+  /** Pre-notify fact, return true if processed. */
+  bool preNotifyFact(TNode atom,
+                     bool pol,
+                     TNode fact,
+                     bool isPrereg,
+                     bool isInternal) override;
+  /** Notify fact */
+  void notifyFact(TNode atom, bool pol, TNode fact, bool isInternal) override;
+  //--------------------------------- end standard check
+
+  /** Collect model values in m based on the relevant terms given by termSet */
+  bool collectModelValues(TheoryModel* m,
+                          const std::set<Node>& termSet) override;
+
+  TrustNode ppRewrite(TNode node, std::vector<SkolemLemma>& lems) override;
+  void preRegisterTerm(TNode term) override;
+  TrustNode explain(TNode n) override;
+
+  void ppStaticLearn(TNode in, NodeBuilder<>& learned) override;
+  void presolve() override;
+
+  void computeCareGraph() override;
+
+  EqualityStatus getEqualityStatus(TNode a, TNode b) override;
+
+  std::string identify() const override { return "THEORY_UF"; }
+
+  FuzzStat fuzzCheck();
+
+  void extractVars(Node const& n)
+  {
+    if (varset.find(n) != varset.end()) return;
+
+    for (Node::iterator child_it = n.begin(); child_it != n.end(); ++child_it)
+    {
+      extractVars(*child_it);
+    }
+
+    if (n.getKind() == kind::VARIABLE) varset.insert(n);
+  }
+
+  // TODO: make names consistent
+  inline void setFuzzingMode() { fuzzingMode = true; }
+  inline void resetFuzzingMode() { fuzzingMode = false; }
+  inline bool isFuzzingMode() { return fuzzingMode; }
+  inline void markFuzzConflict() { fuzzConflict = true; }
+  inline bool isFuzzConflict() { return fuzzConflict; }
+  inline bool isFuzzTimeout() { return fuzzStatus.timeOut; }
+
+  TimerStat d_fuzzTime;
+
+  void resetFuzzer();
+  void storeConflictClause(Node const& nd);
+
+  // TODO : refine this later with const reference and etc.
+  NodeSet getLearntConflicts() { return conflictsLearnt; }
+  void resetLearntConflicts() { conflictsLearnt.clear(); }
+
+  bool isVarAssignment(const Node& nd);
+  void unifyMultipleAssignments();
+
+  void printConflicts(){
+    std::cout << termcolor::blue;
+    std::cout << "\nNew clauses learnt : " << conflictsLearnt.size() << std::endl;
+
+    for (auto child_it = conflictsLearnt.begin(); child_it != conflictsLearnt.end(); ++child_it)
+      std::cout << *child_it << std::endl;
+
+    std::cout << termcolor::reset << std::endl;
+
+  }
+
+  bool isFuzzEngineUNSAT() {
+    return fuzzStatus.crashed == false && fuzzStatus.hasInputVars == false;
+  }
+
+ private:
+  /** Explain why this literal is true by building an explanation */
+  void explain(TNode literal, Node& exp);
+
+  bool areCareDisequal(TNode x, TNode y);
+  void addCarePairs(const TNodeTrie* t1,
+                    const TNodeTrie* t2,
+                    unsigned arity,
+                    unsigned depth);
+  /**
+   * Is t a higher order type? A higher-order type is a function type having
+   * an argument type that is also a function type. This is used for checking
+   * logic exceptions.
+   */
+  bool isHigherOrderType(TypeNode tn);
+  TheoryUfRewriter d_rewriter;
+  /** Proof rule checker */
+  UfProofRuleChecker d_ufProofChecker;
+  /** A (default) theory state object */
+  TheoryState d_state;
+  /** A (default) inference manager */
+  TheoryInferenceManager d_im;
+  /** The notify class */
+  NotifyClass d_notify;
+  /** Cache for isHigherOrderType */
+  std::map<TypeNode, bool> d_isHoType;
+
+public:
+  // Fuzz solver related members
+  NodeSet varset;
+  NodeSet conflictsLearnt;
+  NodeSet fuzzAsserts;
+  bool fuzzingMode;
+  bool fuzzerUsedOnce;
+  bool fuzzConflict;
+  FuzzStat fuzzStatus;
+  AUFBVFuzzStat fuzzSolveStatus;
+
+  /**
+   * Code generation object keeps some state
+   * information about new assertion and input variables
+   */
+}; /* class TheoryUF */
+
+}  // namespace uf
+}  // namespace theory
+}  // namespace cvc5
+
+#endif /* CVC4__THEORY__UF__THEORY_UF_H */
