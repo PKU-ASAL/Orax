@@ -28,7 +28,7 @@ else:
 PROJECT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 BENCHDIR= os.path.abspath('{}/benchmarks-run'.format(PROJECT_DIR))
 if not os.path.exists(BENCHDIR):
-    print("Experiment directory is not prepared. Please run ./prepare_enviroment.sh first.")
+    print("Experiment directory is not prepared. Please run ./prepare_experiment.sh first.")
     exit()
 else:
     print("Experiment directory {} is ready.".format(BENCHDIR))

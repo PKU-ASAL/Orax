@@ -216,3 +216,5 @@ install/
 benchmarks-run
 orax_*.csv
 benchmark_name_mapping.csv
+
+.vscode
