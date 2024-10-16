@@ -1,0 +1,20 @@
+find_package(LLVM REQUIRED CONFIG)
+include_directories(${LLVM_INCLUDE_DIRS})
+link_directories(${LLVM_LIBRARY_DIR})
+add_definitions(${LLVM_DEFINITIONS})
+set(CMAKE_BUILD_WITH_INSTALL_RPATH TRUE)
+message(STATUS "LLVM_INCLUDE_DIRS ${LLVM_INCLUDE_DIRS}")
+message(STATUS "LLVM_LIBRARY_DIR ${LLVM_LIBRARY_DIR}")
+
+file(GLOB_RECURSE SRC_LIST ./*.cpp)
+
+list(REMOVE_ITEM SRC_LIST ${CMAKE_CURRENT_SOURCE_DIR}/./main.cpp)
+add_executable(${PROJECT_NAME} main.cpp)
+add_library(fsolve SHARED ${SRC_LIST})
+target_link_libraries(fsolve dl)
+target_link_libraries(${PROJECT_NAME} fsolve)
+
+llvm_map_components_to_libnames(llvm_libs support)
+message(STATUS "llvm_libs ${llvm_libs}")
+target_link_libraries(${PROJECT_NAME} ${llvm_libs})
+set_target_properties(${PROJECT_NAME} PROPERTIES INSTALL_RPATH ${LLVM_LIBRARY_DIR})

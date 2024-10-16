@@ -1483,15 +1483,44 @@ void AUFBVJitGenerator::codegen(){
       if (skipped_facts_indices.find(assertion_index++) != skipped_facts_indices.end())
         continue;
       Node tnode = Node(*_thi);
-      std::vector<std::string> varnames;
       // relatedBits initialized as all 0 with the length seedSize
       std::vector<uint8_t> relatedBits(seedSize, 0);
       // find target related variables
-      get_all_varnames(tnode, varnames);
-      for (std::string& name : varnames){
+      std::vector<Node> varnodes;
+      get_all_varnodes(tnode, varnodes);
+      for (Node& varnode : varnodes){
+        std::string name = getNodeName(varnode);
         // skip variables that can be derived from other variables (not in the seed)
-        if (varPosMap.find(name) == varPosMap.end())
+        if (varPosMap.find(name) == varPosMap.end()){
+          // find the variables than can derive this variable
+          std::queue<Node> q;
+          q.push(varnode);
+          while (!q.empty()){
+            Node cur = q.front();
+            q.pop();
+            if (derived_vars.find(cur) != derived_vars.end()){
+              std::vector<Node> _vars;
+              get_all_varnodes(derived_vars[cur], _vars);
+              for (Node& _var : _vars){
+                q.push(_var);
+              }
+            }
+            else {
+              assert(cur.getKind() == Kind::VARIABLE);
+              std::string cur_name = getNodeName(cur);
+              assert(varPosMap.find(cur_name) != varPosMap.end());
+              auto pospair = varPosMap[cur_name];
+              size_t start, len;
+              start = pospair.first;
+              len = pospair.second;
+              assert(start + len <= seedSize);
+              for (size_t i = 0; i < len; ++i){
+                relatedBits[start + i] = 0xff;
+              }
+            }
+          }
           continue;
+        }
         auto pospair = varPosMap[name];
         size_t start, len;
         start = pospair.first;
@@ -1509,15 +1538,44 @@ void AUFBVJitGenerator::codegen(){
       if (skipped_facts_indices.find(assertion_index++) != skipped_facts_indices.end())
         continue;
       Node tnode = Node(*thi);
-      std::vector<std::string> varnames;
       // relatedBits initialized as all 0 with the length seedSize
       std::vector<uint8_t> relatedBits(seedSize, 0);
       // find target related variables
-      get_all_varnames(tnode, varnames);
-      for (std::string& name : varnames){
+      std::vector<Node> varnodes;
+      get_all_varnodes(tnode, varnodes);
+      for (Node& varnode : varnodes){
+        std::string name = getNodeName(varnode);
         // skip variables that can be derived from other variables (not in the seed)
-        if (varPosMap.find(name) == varPosMap.end())
+        if (varPosMap.find(name) == varPosMap.end()){
+          // find the variables than can derive this variable
+          std::queue<Node> q;
+          q.push(varnode);
+          while (!q.empty()){
+            Node cur = q.front();
+            q.pop();
+            if (derived_vars.find(cur) != derived_vars.end()){
+              std::vector<Node> _vars;
+              get_all_varnodes(derived_vars[cur], _vars);
+              for (Node& _var : _vars){
+                q.push(_var);
+              }
+            }
+            else {
+              assert(cur.getKind() == Kind::VARIABLE);
+              std::string cur_name = getNodeName(cur);
+              assert(varPosMap.find(cur_name) != varPosMap.end());
+              auto pospair = varPosMap[cur_name];
+              size_t start, len;
+              start = pospair.first;
+              len = pospair.second;
+              assert(start + len <= seedSize);
+              for (size_t i = 0; i < len; ++i){
+                relatedBits[start + i] = 0xff;
+              }
+            }
+          }
           continue;
+        }
         auto pospair = varPosMap[name];
         size_t start, len;
         start = pospair.first;
